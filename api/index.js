@@ -8,22 +8,37 @@ const app = express();
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // Necesario para conexiones a Neon
+    rejectUnauthorized: false
   }
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'https://auction-app-vert.vercel.app'
+}));
 app.use(express.json());
+
+// Ruta de prueba para verificar que el backend está funcionando
+app.get('/', (req, res) => {
+  res.send('Backend is running');
+});
 
 // Ruta para listar subastas
 app.get('/auctions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM auctions');
+    console.log('Intentando conectar a la base de datos...');
+    const client = await pool.connect();
+    console.log('Conexión a la base de datos exitosa');
+    
+    console.log('Ejecutando consulta SELECT * FROM auctions...');
+    const result = await client.query('SELECT * FROM auctions');
+    console.log('Consulta ejecutada, resultado:', result.rows);
+    
+    client.release();
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error al obtener subastas');
+    console.error('Error en /auctions:', err.message, err.stack);
+    res.status(500).send('Error al obtener subastas: ' + err.message);
   }
 });
 
@@ -31,16 +46,17 @@ app.get('/auctions', async (req, res) => {
 app.post('/auctions', async (req, res) => {
   const { title, description, starting_price } = req.body;
   try {
+    console.log('Creando subasta con datos:', { title, description, starting_price });
     const result = await pool.query(
       'INSERT INTO auctions (title, description, starting_price) VALUES ($1, $2, $3) RETURNING *',
       [title, description, starting_price]
     );
+    console.log('Subasta creada:', result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error al crear subasta');
+    console.error('Error en POST /auctions:', err.message, err.stack);
+    res.status(500).send('Error al crear subasta: ' + err.message);
   }
 });
 
-// Exporta la aplicación para que Vercel la use como función serverless
 module.exports = app;
